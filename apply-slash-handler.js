@@ -1,4 +1,35 @@
-// index.js - Slash-command-ready (ESM, Node 25+)
+// apply-slash-handler.mjs
+// Run from project root: node apply-slash-handler.mjs
+// Backs up index.js -> index.js.bak and writes a new ESM index.js ready for slash commands.
+
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT = process.cwd();
+
+const INDEX_PATH = path.join(ROOT, 'index.js');
+const BACKUP_PATH = path.join(ROOT, 'index.js.bak');
+
+if (!fs.existsSync(INDEX_PATH)) {
+  console.error('index.js not found in project root:', ROOT);
+  process.exit(1);
+}
+
+// backup
+if (!fs.existsSync(BACKUP_PATH)) {
+  fs.copyFileSync(INDEX_PATH, BACKUP_PATH);
+  console.log('Backup created at', BACKUP_PATH);
+} else {
+  const bak2 = BACKUP_PATH + '.' + Date.now();
+  fs.copyFileSync(INDEX_PATH, bak2);
+  console.log('Backup created at', bak2);
+}
+
+// new index.js content (ESM, Node 25+)
+const newIndex = `// index.js - Slash-command-ready (ESM, Node 25+)
 // Replaced by apply-slash-handler.mjs. Backup of previous file saved as index.js.bak
 import dotenv from 'dotenv';
 dotenv.config();
@@ -95,7 +126,7 @@ client.on('interactionCreate', async (interaction) => {
       const expiration = timestamps.get(interaction.user.id) + cooldownAmount;
       if (now < expiration) {
         const timeLeft = Math.ceil((expiration - now) / 1000);
-        return interaction.reply({ content: `Please wait ${timeLeft}s before using this command again.`, ephemeral: true });
+        return interaction.reply({ content: \`Please wait \${timeLeft}s before using this command again.\`, ephemeral: true });
       }
     }
     timestamps.set(interaction.user.id, now);
@@ -158,3 +189,8 @@ client.login(TOKEN).then(() => console.log('Logged in as', client.user?.tag)).ca
   console.error('Failed to login:', err);
   process.exit(1);
 });
+`;
+
+// write new index.js
+fs.writeFileSync(INDEX_PATH, newIndex, 'utf8');
+console.log('Wrote new index.js. Start the bot with: node index.js');

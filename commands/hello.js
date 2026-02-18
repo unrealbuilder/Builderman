@@ -1,9 +1,11 @@
+import { SlashCommandBuilder } from 'discord.js';
+
 export default {
-  name: 'hello',
-  description: 'Replies with a greeting.',
-  aliases: ['hi'],
-  cooldown: 3, // seconds
-  async execute(client, message, args) {
-    await message.reply(`Hello, ${message.author.username}! 👋`);
-  }
+  data: new SlashCommandBuilder()
+    .setName('hello')
+    .setDescription('Greets the user'),
+
+  async execute(interaction) {
+    await interaction.reply(`Hello ${interaction.user.username}! 👋`);
+  },
 };
