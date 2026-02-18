@@ -1,25 +1,42 @@
+// commands/unban.js
 import { SlashCommandBuilder } from 'discord.js';
 
 export const data = new SlashCommandBuilder()
   .setName('unban')
   .setDescription('Unbans a user from the server.')
-  .addUserOption(option =>
-    option.setName('target')
-      .setDescription('The user to unban')
-      .setRequired(true));
+  .addStringOption(option =>
+    option
+      .setName('userid')
+      .setDescription('The ID of the user to unban')
+      .setRequired(true)
+  );
 
 export async function execute(client, interaction) {
-  try {
-    const user = interaction.options.getUser('target');
+  const userId = interaction.options.getString('userid');
 
-    if (!interaction.member.permissions.has('BanMembers')) {
-      return interaction.reply({ content: 'You do not have permission to unban members.', ephemeral: true });
+  try {
+    // Fetch the ban list
+    const bans = await interaction.guild.bans.fetch();
+    const bannedUser = bans.get(userId);
+
+    if (!bannedUser) {
+      return await interaction.reply({
+        content: `User with ID \`${userId}\` is not banned.`,
+        ephemeral: true
+      });
     }
 
-    await interaction.guild.bans.remove(user.id);
-    await interaction.reply({ content: `${user.tag} has been unbanned.` });
+    // Unban the user
+    await interaction.guild.bans.remove(userId, `Unbanned by ${interaction.user.tag}`);
+
+    await interaction.reply({
+      content: `✅ Successfully unbanned <@${userId}>!`
+    });
   } catch (err) {
     console.error(err);
-    await interaction.reply({ content: 'Failed to unban this user.', ephemeral: true });
+    await interaction.reply({
+      content: '❌ Failed to unban the user. Make sure I have proper permissions and the ID is correct.',
+      ephemeral: true
+    });
   }
 }
