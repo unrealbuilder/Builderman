@@ -1,145 +1,152 @@
-// index.js - updated Discord bot (CommonJS)
+// index.js - modular Discord.js v14 bot (CommonJS)
+// - command loader
+// - cooldowns
+// - safe error handling
+// - heartbeat /ping
+// - graceful shutdown
 
-// Load local .env (for local dev). In production (Railway) you don't need a .env file.
 require('dotenv').config();
-
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
-const pkg = require('./package.json'); // used for version/name in the info command
+const { Client, GatewayIntentBits, Collection } = require('discord.js');
 
-// Config / constants
-const PREFIX = '!';
-const CREATOR = 'Builderman#7813'; // change if you want
 const TOKEN = process.env.DISCORD_TOKEN;
+const OWNER_ID = process.env.OWNER_ID || null; // for admin commands like reload
+const PREFIX = process.env.PREFIX || '!';
 const PORT = process.env.PORT || 3000;
+const PRESENCE = process.env.PRESENCE || 'Helping servers build';
 
 if (!TOKEN) {
-  console.error('ERROR: DISCORD_TOKEN is not set. Set it in .env locally or in Railway environment variables.');
+  console.error('FATAL: DISCORD_TOKEN not found in environment. Aborting.');
   process.exit(1);
 }
 
-// Create Discord client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,    // welcome / leave events
-    GatewayIntentBits.GuildMessages,   // messageCreate
-    GatewayIntentBits.MessageContent   // read message content for commands
-  ]
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
+  makeCache: undefined,
 });
 
-// --- Bot ready ---
+// Collections for commands & cooldowns
+client.commands = new Collection();
+client.cooldowns = new Collection();
+
+// Load command files
+const commandsPath = path.join(__dirname, 'commands');
+if (fs.existsSync(commandsPath)) {
+  const files = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
+  for (const file of files) {
+    try {
+      const cmd = require(path.join(commandsPath, file));
+      if (!cmd || !cmd.name || typeof cmd.execute !== 'function') {
+        console.warn(`Skipping invalid command file: ${file}`);
+        continue;
+      }
+      client.commands.set(cmd.name, cmd);
+      // register aliases
+      if (Array.isArray(cmd.aliases)) {
+        for (const a of cmd.aliases) client.commands.set(a, cmd);
+      }
+      console.log(`Loaded command: ${cmd.name} (${file})`);
+    } catch (err) {
+      console.error(`Failed loading command ${file}:`, err);
+    }
+  }
+} else {
+  console.warn('No commands folder found. Create ./commands and add command files.');
+}
+
+// Ready
 client.once('ready', () => {
   console.log(`${client.user.tag} is online!`);
-  try {
-    client.user.setActivity('Helping servers build'); // optional presence
-  } catch (err) {
-    // ignore presence errors if not allowed
-  }
+  try { client.user.setActivity(PRESENCE); } catch (e) {}
 });
 
-// --- Message / Command handler ---
+// Message handler
 client.on('messageCreate', async (message) => {
   try {
-    if (message.author?.bot) return; // ignore bots
+    if (!message.guild || message.author.bot) return;
+    const content = message.content.trim();
+    if (!content.startsWith(PREFIX)) return;
 
-    const text = message.content?.trim();
-    if (!text || !text.startsWith(PREFIX)) return;
-
-    const args = text.slice(PREFIX.length).trim().split(/\s+/);
-    const command = args.shift().toLowerCase();
-
-    // !hello
-    if (command === 'hello') {
-      await message.reply(`Hello, ${message.author.username}! 👋`);
+    const args = content.slice(PREFIX.length).trim().split(/\s+/);
+    const invoked = args.shift().toLowerCase();
+    const command = client.commands.get(invoked);
+    if (!command) {
+      // optional: silently ignore or inform
       return;
     }
 
-    // !ping - measures round trip using a temporary message
-    if (command === 'ping') {
-      const sent = await message.reply('Pinging…');
-      await sent.edit(`Pong! 🏓 Latency is ${sent.createdTimestamp - message.createdTimestamp}ms`);
-      return;
+    // Permission check (if command.owner === true)
+    if (command.ownerOnly && String(message.author.id) !== String(OWNER_ID)) {
+      return message.reply('You are not allowed to use this command.');
     }
 
-    // !info - embed with bot info
-    if (command === 'info') {
-      const embed = new EmbedBuilder()
-        .setTitle('Bot Information')
-        .setColor(0x00AE86)
-        .addFields(
-          { name: 'Name', value: client.user.username, inline: true },
-          { name: 'Version', value: pkg.version || '1.0.0', inline: true },
-          { name: 'Creator', value: CREATOR, inline: true }
-        )
-        .setTimestamp();
-      await message.channel.send({ embeds: [embed] });
-      return;
+    // Cooldown handling
+    const now = Date.now();
+    const timestamps = client.cooldowns.get(command.name) || new Collection();
+    const cooldownAmount = (command.cooldown || 3) * 1000;
+
+    if (timestamps.has(message.author.id)) {
+      const expiration = timestamps.get(message.author.id) + cooldownAmount;
+      if (now < expiration) {
+        const timeLeft = Math.ceil((expiration - now) / 1000);
+        return message.reply(`Please wait ${timeLeft}s before using \`${PREFIX}${command.name}\` again.`);
+      }
     }
 
-    // Unknown command handler (simple)
-    await message.reply('Unknown command. Try `!hello`, `!ping`, or `!info`.');
+    // Set timestamp and schedule removal
+    timestamps.set(message.author.id, now);
+    client.cooldowns.set(command.name, timestamps);
+    setTimeout(() => timestamps.delete(message.author.id), cooldownAmount);
+
+    // Execute
+    await command.execute(client, message, args);
   } catch (err) {
     console.error('Error handling messageCreate:', err);
-    // Don't crash — let the user know something went wrong
-    try { message.reply('Something went wrong while processing the command.'); } catch (e) {}
+    try { await message.reply('Something went wrong while processing that command.'); } catch (e) {}
   }
 });
 
-// --- Welcome / Farewell events ---
+// Basic guildMember events (welcome/leave)
 client.on('guildMemberAdd', (member) => {
   try {
-    const channel = member.guild.systemChannel;
-    if (!channel) return; // if no system channel, skip
-    channel.send(`Welcome to ${member.guild.name}, ${member.user}! 🎉`);
-  } catch (err) {
-    console.error('guildMemberAdd handler error:', err);
-  }
+    const ch = member.guild.systemChannel;
+    if (ch) ch.send(`Welcome to ${member.guild.name}, ${member.user}! 🎉`);
+  } catch (err) { console.error('guildMemberAdd error:', err); }
 });
-
 client.on('guildMemberRemove', (member) => {
   try {
-    const channel = member.guild.systemChannel;
-    if (!channel) return;
-    channel.send(`${member.user.tag} has left the server.`);
-  } catch (err) {
-    console.error('guildMemberRemove handler error:', err);
-  }
+    const ch = member.guild.systemChannel;
+    if (ch) ch.send(`${member.user.tag} has left the server.`);
+  } catch (err) { console.error('guildMemberRemove error:', err); }
 });
 
-// --- Global error handling (safe logging) ---
-process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled Rejection:', reason);
-});
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
-});
+// Global error handlers
+process.on('unhandledRejection', (reason) => console.error('Unhandled Rejection:', reason));
+process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
 
-// --- Express heartbeat for Railway / uptime services ---
+// Heartbeat HTTP server (for Railway / uptime monitor)
 const app = express();
-app.get('/ping', (req, res) => {
-  // useful to keep the app awake with an uptime monitor
-  console.log('Received /ping');
-  res.status(200).send('Pong');
-});
-app.listen(PORT, () => {
-  console.log(`Heartbeat server listening on port ${PORT}`);
-});
+app.get('/', (req, res) => res.send('OK'));
+app.get('/ping', (req, res) => res.status(200).send('Pong'));
+app.listen(PORT, () => console.log(`Heartbeat server listening on port ${PORT}`));
 
-// --- Graceful shutdown ---
-async function shutdown(signal) {
-  console.log(`Received ${signal}, shutting down...`);
-  try {
-    await client.destroy();
-  } catch (err) {
-    console.warn('Error during client.destroy()', err);
-  }
+// Graceful shutdown
+async function shutdown(sig) {
+  console.log(`Received ${sig}, shutting down...`);
+  try { await client.destroy(); } catch (err) { console.warn('Error destroying client:', err); }
   process.exit(0);
 }
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-// --- Login ---
+// Login
 client.login(TOKEN).catch(err => {
   console.error('Failed to login:', err);
   process.exit(1);
