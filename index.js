@@ -1,81 +1,146 @@
-// index.js
-// Discord bot fully compatible with Railway free hosting
-// Commands: !hello, !info, !ping
-// Welcome & leave events
-// Heartbeat ping endpoint included
+// index.js - updated Discord bot (CommonJS)
 
+// Load local .env (for local dev). In production (Railway) you don't need a .env file.
+require('dotenv').config();
+
+const express = require('express');
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
-const express = require('express'); // For heartbeat ping
-require('dotenv').config(); // Load .env
+const pkg = require('./package.json'); // used for version/name in the info command
 
-// --------- Discord Bot Setup ---------
+// Config / constants
+const PREFIX = '!';
+const CREATOR = 'Builderman#7813'; // change if you want
+const TOKEN = process.env.DISCORD_TOKEN;
+const PORT = process.env.PORT || 3000;
+
+if (!TOKEN) {
+  console.error('ERROR: DISCORD_TOKEN is not set. Set it in .env locally or in Railway environment variables.');
+  process.exit(1);
+}
+
+// Create Discord client
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds, // Required for basic guild info
-        GatewayIntentBits.GuildMessages, // Listen to messages
-        GatewayIntentBits.MessageContent, // Required to read message content
-        GatewayIntentBits.GuildMembers // For welcome/leave events
-    ]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,    // welcome / leave events
+    GatewayIntentBits.GuildMessages,   // messageCreate
+    GatewayIntentBits.MessageContent   // read message content for commands
+  ]
 });
 
-const token = process.env.DISCORD_TOKEN;
-
-// --------- Bot Events ---------
+// --- Bot ready ---
 client.once('ready', () => {
-    console.log(`${client.user.tag} is online!`);
+  console.log(`${client.user.tag} is online!`);
+  try {
+    client.user.setActivity('Helping servers build'); // optional presence
+  } catch (err) {
+    // ignore presence errors if not allowed
+  }
 });
 
+// --- Message / Command handler ---
 client.on('messageCreate', async (message) => {
-    if (message.author.bot) return; // Ignore bot messages
+  try {
+    if (message.author?.bot) return; // ignore bots
 
-    const content = message.content.toLowerCase();
+    const text = message.content?.trim();
+    if (!text || !text.startsWith(PREFIX)) return;
 
-    if (content === '!hello') {
-        message.channel.send(`Hello, ${message.author.username}!`);
+    const args = text.slice(PREFIX.length).trim().split(/\s+/);
+    const command = args.shift().toLowerCase();
+
+    // !hello
+    if (command === 'hello') {
+      await message.reply(`Hello, ${message.author.username}! 👋`);
+      return;
     }
 
-    if (content === '!info') {
-        const infoEmbed = new EmbedBuilder()
-            .setTitle('Bot Information')
-            .setColor(0x00AE86)
-            .addFields(
-                { name: 'Bot Name', value: client.user.username, inline: true },
-                { name: 'Version', value: '1.0.0', inline: true },
-                { name: 'Creator', value: 'Builderman#7813', inline: true }
-            );
-        message.channel.send({ embeds: [infoEmbed] });
+    // !ping - measures round trip using a temporary message
+    if (command === 'ping') {
+      const sent = await message.reply('Pinging…');
+      await sent.edit(`Pong! 🏓 Latency is ${sent.createdTimestamp - message.createdTimestamp}ms`);
+      return;
     }
 
-    if (content === '!ping') {
-        const latency = Date.now() - message.createdTimestamp;
-        message.channel.send(`🏓 Latency: ${latency}ms`);
+    // !info - embed with bot info
+    if (command === 'info') {
+      const embed = new EmbedBuilder()
+        .setTitle('Bot Information')
+        .setColor(0x00AE86)
+        .addFields(
+          { name: 'Name', value: client.user.username, inline: true },
+          { name: 'Version', value: pkg.version || '1.0.0', inline: true },
+          { name: 'Creator', value: CREATOR, inline: true }
+        )
+        .setTimestamp();
+      await message.channel.send({ embeds: [embed] });
+      return;
     }
+
+    // Unknown command handler (simple)
+    await message.reply('Unknown command. Try `!hello`, `!ping`, or `!info`.');
+  } catch (err) {
+    console.error('Error handling messageCreate:', err);
+    // Don't crash — let the user know something went wrong
+    try { message.reply('Something went wrong while processing the command.'); } catch (e) {}
+  }
 });
 
-// Welcome new members
+// --- Welcome / Farewell events ---
 client.on('guildMemberAdd', (member) => {
-    const channel = member.guild.systemChannel; // Default system channel
-    if (channel) channel.send(`Welcome to the server, ${member.user.username}! 🎉`);
-});
-
-// Farewell when members leave
-client.on('guildMemberRemove', (member) => {
+  try {
     const channel = member.guild.systemChannel;
-    if (channel) channel.send(`${member.user.username} has left the server. 😢`);
+    if (!channel) return; // if no system channel, skip
+    channel.send(`Welcome to ${member.guild.name}, ${member.user}! 🎉`);
+  } catch (err) {
+    console.error('guildMemberAdd handler error:', err);
+  }
 });
 
-// Handle errors gracefully
-client.on('error', console.error);
+client.on('guildMemberRemove', (member) => {
+  try {
+    const channel = member.guild.systemChannel;
+    if (!channel) return;
+    channel.send(`${member.user.tag} has left the server.`);
+  } catch (err) {
+    console.error('guildMemberRemove handler error:', err);
+  }
+});
 
-// --------- Railway Heartbeat Ping ---------
+// --- Global error handling (safe logging) ---
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
+
+// --- Express heartbeat for Railway / uptime services ---
 const app = express();
 app.get('/ping', (req, res) => {
-    console.log('Received heartbeat ping ✅');
-    res.send('Pong!');
+  // useful to keep the app awake with an uptime monitor
+  console.log('Received /ping');
+  res.status(200).send('Pong');
+});
+app.listen(PORT, () => {
+  console.log(`Heartbeat server listening on port ${PORT}`);
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Heartbeat server running on port ${PORT}`));
+// --- Graceful shutdown ---
+async function shutdown(signal) {
+  console.log(`Received ${signal}, shutting down...`);
+  try {
+    await client.destroy();
+  } catch (err) {
+    console.warn('Error during client.destroy()', err);
+  }
+  process.exit(0);
+}
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-// --------- Login to Discord ---------
-client.login(token);
+// --- Login ---
+client.login(TOKEN).catch(err => {
+  console.error('Failed to login:', err);
+  process.exit(1);
+});
