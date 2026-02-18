@@ -21,7 +21,7 @@ export async function execute(client, interaction) {
 
     if (!bannedUser) {
       return await interaction.reply({
-        content: `User with ID \`${userId}\` is not banned.`,
+        content: `❌ User with ID \`${userId}\` is not banned.`,
         ephemeral: true
       });
     }
@@ -35,7 +35,7 @@ export async function execute(client, interaction) {
   } catch (err) {
     console.error(err);
     await interaction.reply({
-      content: '❌ Failed to unban the user. Make sure I have proper permissions and the ID is correct.',
+      content: '❌ Failed to unban the user. Make sure the ID is correct and I have proper permissions.',
       ephemeral: true
     });
   }
