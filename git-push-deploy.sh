@@ -1,26 +1,67 @@
-#!/usr/bin/env bash
-# git-push-deploy.sh
-# Usage:
-#  ./git-push-deploy.sh           # push then prompt to deploy global
-#  ./git-push-deploy.sh --guild GUILD_ID   # push then prompt to deploy to guild
-#  ./git-push-deploy.sh -y --guild GUILD_ID  # push then deploy without prompt
+#!/bin/bash
 
-set -euo pipefail
+# ===============================
+# Git Push & Optional Deploy Script
+# ===============================
 
-# run git push with all args except those meant for deploy. We'll forward args starting from --deploy-*
-# Simpler: pass all args to git push, then forward same args to deploy script.
-# If you want different behavior, edit accordingly.
+# Colors for output
+RED="\033[0;31m"
+GREEN="\033[0;32m"
+YELLOW="\033[1;33m"
+NC="\033[0m" # No Color
 
-echo "Running: git push"
-git push "$@" || { echo "git push failed"; exit 1; }
+echo -e "${YELLOW}Starting Git Push & Deploy Script...${NC}"
 
-echo "git push succeeded."
-
-# Now run deploy script
-if command -v node >/dev/null 2>&1; then
-  echo "Running deploy-commands.js..."
-  node deploy-commands.js "$@"
-else
-  echo "node not found in PATH. Please run deploy-commands.js manually."
-  exit 1
+# Detect current branch
+BRANCH=$(git branch --show-current)
+if [ -z "$BRANCH" ]; then
+    echo -e "${RED}Error: Not on any git branch.${NC}"
+    exit 1
 fi
+echo -e "${GREEN}Current branch: $BRANCH${NC}"
+
+# Check for uncommitted changes
+if ! git diff-index --quiet HEAD --; then
+    echo -e "${YELLOW}You have uncommitted changes.${NC}"
+else
+    echo -e "${GREEN}No uncommitted changes detected.${NC}"
+fi
+
+# Prompt for commit message
+read -p "Enter commit message: " COMMIT_MSG
+if [ -z "$COMMIT_MSG" ]; then
+    echo -e "${RED}No commit message entered. Exiting.${NC}"
+    exit 1
+fi
+
+# Stage all changes
+git add .
+
+# Commit
+git commit -m "$COMMIT_MSG"
+
+# Confirm before pushing
+read -p "Push to branch '$BRANCH'? (y/n) " CONFIRM
+if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
+    git push origin "$BRANCH"
+    echo -e "${GREEN}Changes pushed to $BRANCH successfully!${NC}"
+else
+    echo -e "${RED}Push canceled.${NC}"
+    exit 0
+fi
+
+# Optional: Run deploy command
+read -p "Run deploy script after push? (y/n) " DEPLOY_CONFIRM
+if [[ "$DEPLOY_CONFIRM" =~ ^[Yy]$ ]]; then
+    if [ -f "./deploy-commands.js" ]; then
+        echo -e "${GREEN}Running deploy-commands.js...${NC}"
+        node deploy-commands.js
+        echo -e "${GREEN}Deploy finished.${NC}"
+    else
+        echo -e "${RED}deploy-commands.js not found. Skipping deploy.${NC}"
+    fi
+else
+    echo -e "${YELLOW}Skipping deploy.${NC}"
+fi
+
+echo -e "${GREEN}Script finished.${NC}"
