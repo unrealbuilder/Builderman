@@ -9,13 +9,13 @@ export const data = new SlashCommandBuilder()
       .setRequired(true));
 
 export async function execute(client, interaction) {
-  const user = interaction.options.getUser('target');
-
-  if (!interaction.member.permissions.has('BanMembers')) {
-    return interaction.reply({ content: 'You do not have permission to unban members.', ephemeral: true });
-  }
-
   try {
+    const user = interaction.options.getUser('target');
+
+    if (!interaction.member.permissions.has('BanMembers')) {
+      return interaction.reply({ content: 'You do not have permission to unban members.', ephemeral: true });
+    }
+
     await interaction.guild.bans.remove(user.id);
     await interaction.reply({ content: `${user.tag} has been unbanned.` });
   } catch (err) {

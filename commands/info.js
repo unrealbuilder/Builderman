@@ -1,27 +1,26 @@
 import { SlashCommandBuilder } from 'discord.js';
-import fs from 'fs';
+import pkg from '../package.json' assert { type: 'json' };
 
-export default {
-  data: new SlashCommandBuilder()
-    .setName('info')
-    .setDescription('Shows bot information'),
+export const data = new SlashCommandBuilder()
+  .setName('info')
+  .setDescription('Shows bot information.');
 
-  async execute(interaction) {
-    const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
-
-    await interaction.reply({
-      embeds: [
-        {
-          title: 'Bot Info',
-          color: 0x5865F2,
-          fields: [
-            { name: 'Bot Name', value: interaction.client.user.tag, inline: true },
-            { name: 'Version', value: pkg.version || '1.0.0', inline: true },
-            { name: 'Node', value: process.version, inline: true }
-          ],
-          timestamp: new Date()
-        }
-      ]
-    });
-  },
-};
+export async function execute(client, interaction) {
+  try {
+    const embed = {
+      title: 'Bot Information',
+      color: 0x00AE86,
+      fields: [
+        { name: 'Name', value: `${client.user.tag}`, inline: true },
+        { name: 'Version', value: `${pkg.version}`, inline: true },
+        { name: 'Creator', value: 'unrealbuilder', inline: true },
+        { name: 'Servers', value: `${client.guilds.cache.size}`, inline: true },
+      ],
+      timestamp: new Date()
+    };
+    await interaction.reply({ embeds: [embed] });
+  } catch (err) {
+    console.error(err);
+    await interaction.reply({ content: 'Something went wrong.', ephemeral: true });
+  }
+}
