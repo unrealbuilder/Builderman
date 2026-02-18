@@ -2,17 +2,22 @@
   "name": "builderman-bot",
   "version": "1.0.0",
   "description": "Discord bot for building and managing servers",
+  "type": "module",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=25.0.0"
   },
   "dependencies": {
     "discord.js": "^14.25.1",
     "dotenv": "^16.6.1",
     "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
   },
   "repository": {
     "type": "git",
@@ -23,5 +28,6 @@
   "bugs": {
     "url": "https://github.com/unrealbuilder/Builderman/issues"
   },
-  "homepage": "https://github.com/unrealbuilder/Builderman#readme"
+  "homepage": "https://github.com/unrealbuilder/Builderman#readme",
+  "keywords": ["discord", "bot", "esm", "nodejs", "express"]
 }
