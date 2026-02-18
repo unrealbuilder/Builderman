@@ -1,160 +1,49 @@
-// index.js - Slash-command-ready (ESM, Node 25+)
-// Replaced by apply-slash-handler.mjs. Backup of previous file saved as index.js.bak
-import dotenv from 'dotenv';
-dotenv.config();
-
+import 'dotenv/config';
+import { Client, Collection, GatewayIntentBits } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
-import express from 'express';
-import { fileURLToPath } from 'url';
-import { Client, GatewayIntentBits, Collection } from 'discord.js';
-import { pathToFileURL } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-const TOKEN = process.env.DISCORD_TOKEN;
-const OWNER_ID = process.env.OWNER_ID || null;
-const PREFIX = process.env.PREFIX || '!';
-const PORT = process.env.PORT || 3000;
-const PRESENCE = process.env.PRESENCE || 'Helping servers build';
-
-if (!TOKEN) {
-  console.error('FATAL: DISCORD_TOKEN not found in environment. Aborting.');
-  process.exit(1);
-}
-
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    // Not necessary for slash commands, but keep if you need them:
-    GatewayIntentBits.GuildMessages,
-  ],
-});
-
-// Collections
+// Load commands
 client.commands = new Collection();
-client.cooldowns = new Collection();
+const commandsPath = path.resolve('./commands');
+const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
 
-// --- Load slash commands (expect command.data and command.execute) ---
-const commandsPath = path.join(process.cwd(), 'commands');
-if (fs.existsSync(commandsPath)) {
-  const files = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js') || f.endsWith('.mjs'));
-  (async () => {
-    for (const file of files) {
-      const fullPath = path.join(commandsPath, file);
-      try {
-        const mod = await import(pathToFileURL(fullPath).href);
-        const cmd = mod.default ?? mod;
-        if (!cmd) {
-          console.warn('Skipping', file, '- no export found');
-          continue;
-        }
-        // slash commands must export data (SlashCommandBuilder) and execute(interaction)
-        if (!('data' in cmd) || typeof cmd.data?.toJSON !== 'function') {
-          console.warn('Skipping', file, '- missing data (SlashCommandBuilder)');
-          continue;
-        }
-        if (!('execute' in cmd) || typeof cmd.execute !== 'function') {
-          console.warn('Skipping', file, '- missing execute(interaction)');
-          continue;
-        }
-        const name = cmd.data.name ?? cmd.data?.toJSON?.().name;
-        client.commands.set(name, cmd);
-        console.log('Loaded command:', name, '(', file, ')');
-      } catch (err) {
-        console.error('Failed loading command', file, err);
-      }
+for (const file of commandFiles) {
+  try {
+    const command = await import(`file://${path.join(commandsPath, file)}`);
+    if (command.data && command.execute) {
+      client.commands.set(command.data.name, command);
+      console.log(`✅ Loaded command: ${command.data.name} (${file})`);
+    } else {
+      console.log(`⚠️ Skipped ${file}: missing 'data' or 'execute'`);
     }
-  })();
-} else {
-  console.warn('No commands folder found at', commandsPath);
+  } catch (err) {
+    console.log(`❌ Error loading ${file}:`, err);
+  }
 }
 
-// --- Interaction handler (slash commands) ---
-client.on('interactionCreate', async (interaction) => {
+// Handle slash commands
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isCommand()) return;
+  const command = client.commands.get(interaction.commandName);
+  if (!command) return;
+
   try {
-    if (!interaction.isChatInputCommand()) return; // ignore non-chat commands
-    const command = client.commands.get(interaction.commandName);
-    if (!command) {
-      // command not found in collection
-      return interaction.reply({ content: 'Command not loaded on this bot instance.', ephemeral: true });
-    }
-
-    // Optional: owner-only check if you set ownerOnly on your command objects
-    if (command.ownerOnly && String(interaction.user.id) !== String(OWNER_ID)) {
-      return interaction.reply({ content: 'You are not allowed to use this command.', ephemeral: true });
-    }
-
-    // Cooldown (per command)
-    const now = Date.now();
-    const timestamps = client.cooldowns.get(command.data.name) || new Collection();
-    const cooldownAmount = (command.cooldown || 3) * 1000;
-    if (timestamps.has(interaction.user.id)) {
-      const expiration = timestamps.get(interaction.user.id) + cooldownAmount;
-      if (now < expiration) {
-        const timeLeft = Math.ceil((expiration - now) / 1000);
-        return interaction.reply({ content: `Please wait ${timeLeft}s before using this command again.`, ephemeral: true });
-      }
-    }
-    timestamps.set(interaction.user.id, now);
-    client.cooldowns.set(command.data.name, timestamps);
-    setTimeout(() => timestamps.delete(interaction.user.id), cooldownAmount);
-
-    // Execute
-    await command.execute(interaction);
+    await command.execute(client, interaction);
   } catch (err) {
-    console.error('Error in interactionCreate:', err);
-    try {
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({ content: 'There was an error while executing this command.', ephemeral: true });
-      } else {
-        await interaction.reply({ content: 'There was an error while executing this command.', ephemeral: true });
-      }
-    } catch (e) {
-      console.error('Failed to send error reply to interaction:', e);
+    console.error(`Error executing ${interaction.commandName}:`, err);
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp({ content: 'There was an error while executing this command.', ephemeral: true });
+    } else {
+      await interaction.reply({ content: 'There was an error while executing this command.', ephemeral: true });
     }
   }
 });
 
-/* Optional: keep messageCreate if you want both prefix + slash (commented)
-client.on('messageCreate', async (message) => {
-  if (!message.guild || message.author.bot) return;
-  if (!message.content.startsWith(PREFIX)) return;
-  // ... old prefix handling (not included) ...
-});
-*/
-
-// --- Basic guildMember events ---
-client.on('guildMemberAdd', (member) => {
-  try { member.guild.systemChannel?.send('Welcome to ' + member.guild.name + ', ' + member.user + '! 🎉'); } catch(e) {}
-});
-client.on('guildMemberRemove', (member) => {
-  try { member.guild.systemChannel?.send(member.user.tag + ' has left the server.'); } catch(e) {}
+client.once('ready', () => {
+  console.log(`${client.user.tag} is online!`);
 });
 
-// Global error handlers
-process.on('unhandledRejection', console.error);
-process.on('uncaughtException', console.error);
-
-// Heartbeat server
-const app = express();
-app.get('/', (req, res) => res.send('OK'));
-app.get('/ping', (req, res) => res.status(200).send('Pong'));
-app.listen(PORT, () => console.log('Heartbeat server listening on port ' + PORT));
-
-// Graceful shutdown
-async function shutdown(sig) {
-  console.log('Received', sig, 'shutting down...');
-  try { await client.destroy(); } catch (err) { console.warn('Error destroying client:', err); }
-  process.exit(0);
-}
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-
-// Login
-client.login(TOKEN).then(() => console.log('Logged in as', client.user?.tag)).catch((err) => {
-  console.error('Failed to login:', err);
-  process.exit(1);
-});
+client.login(process.env.DISCORD_TOKEN);
