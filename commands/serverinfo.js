@@ -1,10 +1,24 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 
 export const data = new SlashCommandBuilder()
   .setName('serverinfo')
-  .setDescription('Information about this server.');
+  .setDescription('Displays information about this server');
 
 export async function execute(client, interaction) {
-  const guild = interaction.guild;
-  interaction.reply(`**Server Info:**\n- Name: ${guild.name}\n- ID: ${guild.id}\n- Members: ${guild.memberCount}\n- Channels: ${guild.channels.cache.size}`);
+  const { guild } = interaction;
+
+  const embed = new EmbedBuilder()
+    .setTitle(`🏰 ${guild.name} Info`)
+    .setColor('Green')
+    .addFields(
+      { name: 'Server ID', value: guild.id, inline: true },
+      { name: 'Members', value: `${guild.memberCount}`, inline: true },
+      { name: 'Owner', value: `<@${guild.ownerId}>`, inline: true },
+      { name: 'Created', value: `<t:${Math.floor(guild.createdTimestamp / 1000)}:D>`, inline: true },
+      { name: 'Roles', value: `${guild.roles.cache.size}`, inline: true }
+    )
+    .setThumbnail(guild.iconURL({ dynamic: true }))
+    .setFooter({ text: 'Server Info | Open Source' });
+
+  await interaction.reply({ embeds: [embed] });
 }
