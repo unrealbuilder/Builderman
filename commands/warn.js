@@ -1,34 +1,48 @@
-import { SlashCommandBuilder } from 'discord.js';
-import fs from 'fs';
-import path from 'path';
+import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 
-const warningsFile = path.join('./data', 'warnings.json');
+const cooldowns = new Map();
+const COOLDOWN_TIME = 5000;
 
 export const data = new SlashCommandBuilder()
   .setName('warn')
-  .setDescription('Add a warning to a member')
+  .setDescription('Warn a user (moderator only)')
   .addUserOption(option => 
-    option.setName('user')
-      .setDescription('Member to warn')
-      .setRequired(true))
+    option.setName('target')
+      .setDescription('User to warn')
+      .setRequired(true)
+  )
   .addStringOption(option => 
     option.setName('reason')
       .setDescription('Reason for warning')
-      .setRequired(true));
+      .setRequired(false)
+  );
 
-export async function execute(client, interaction) {
-  const user = interaction.options.getUser('user');
-  const reason = interaction.options.getString('reason');
+export async function execute(interaction) {
+  const member = interaction.member;
 
-  let warnings = {};
-  if (fs.existsSync(warningsFile)) {
-    warnings = JSON.parse(fs.readFileSync(warningsFile, 'utf8'));
+  if (!member.permissions.has('ManageMessages') && !member.permissions.has('Administrator')) {
+    return interaction.reply({ content: '❌ You need to be a moderator to use this command.', ephemeral: true });
   }
 
-  if (!warnings[user.id]) warnings[user.id] = [];
-  warnings[user.id].push({ reason, date: new Date().toISOString() });
+  const now = Date.now();
+  const cooldown = cooldowns.get(member.id) || 0;
+  if (now < cooldown) {
+    return interaction.reply({ content: `⏳ Cooldown active. Try again in ${Math.ceil((cooldown-now)/1000)}s.`, ephemeral: true });
+  }
+  cooldowns.set(member.id, now + COOLDOWN_TIME);
 
-  fs.writeFileSync(warningsFile, JSON.stringify(warnings, null, 2));
+  const target = interaction.options.getUser('target');
+  const reason = interaction.options.getString('reason') || 'No reason provided';
 
-  await interaction.reply(`✅ ${user.tag} has been warned for: "${reason}"`);
+  const embed = new EmbedBuilder()
+    .setTitle('⚠️ User Warned')
+    .setDescription(`${target.tag} was warned.`)
+    .addFields(
+      { name: 'Moderator', value: member.user.tag, inline: true },
+      { name: 'Reason', value: reason, inline: true }
+    )
+    .setColor('Orange')
+    .setTimestamp();
+
+  await interaction.reply({ embeds: [embed], ephemeral: true });
 }

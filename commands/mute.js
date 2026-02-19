@@ -1,62 +1,55 @@
-// commands/mute.js
-import { SlashCommandBuilder, PermissionsBitField } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ChannelType } from 'discord.js';
 
 export const data = new SlashCommandBuilder()
   .setName('mute')
-  .setDescription('Mutes a user in this server.')
+  .setDescription('Mute a user in the server.')
   .addUserOption(option =>
-    option.setName('user')
-      .setDescription('The user to mute')
-      .setRequired(true))
+    option.setName('target')
+      .setDescription('User to mute')
+      .setRequired(true)
+  )
   .addStringOption(option =>
     option.setName('reason')
-      .setDescription('Reason for muting')
-      .setRequired(false));
+      .setDescription('Reason for mute')
+      .setRequired(false)
+  )
+  .addBooleanOption(option =>
+    option.setName('public')
+      .setDescription('Announce the mute publicly')
+      .setRequired(false)
+  )
+  .addChannelOption(option =>
+    option.setName('channel')
+      .setDescription('Channel to announce the mute in')
+      .addChannelTypes(ChannelType.GuildText)
+      .setRequired(false)
+  );
 
-export async function execute(client, interaction) {
-  const user = interaction.options.getUser('user');
+export async function execute(interaction) {
+  const member = interaction.member;
+  if (!member.permissions.has('ModerateMembers')) return interaction.reply({ content: '❌ You need moderator permissions.', ephemeral: true });
+
+  const target = interaction.options.getMember('target');
   const reason = interaction.options.getString('reason') || 'No reason provided';
+  const isPublic = interaction.options.getBoolean('public');
+  const announceChannel = interaction.options.getChannel('channel');
 
-  try {
-    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
-      return await interaction.reply({ content: '❌ You do not have permission to mute members.', ephemeral: true });
+  if (!target) return interaction.reply({ content: '❌ Cannot find that user.', ephemeral: true });
+  if (!target.moderatable) return interaction.reply({ content: '❌ Cannot mute this user.', ephemeral: true });
+
+  if (isPublic && announceChannel) {
+    const frames = ['🔇 Preparing mute...', '🔇 Applying...', '🔇 Muted!'];
+    const embed = new EmbedBuilder().setTitle('🔇 Muting User').setColor(0xFFA500).setTimestamp();
+    const message = await announceChannel.send({ embeds: [embed] });
+    await interaction.reply({ content: `🚨 Public mute countdown started for ${target.user.tag}`, ephemeral: true });
+
+    for (const frame of frames) {
+      embed.setDescription(`${frame}\nTarget: ${target.user.tag}`);
+      await message.edit({ embeds: [embed] });
+      await new Promise(r => setTimeout(r, 1000));
     }
-
-    const member = await interaction.guild.members.fetch(user.id);
-
-    // Find or create the Muted role
-    let muteRole = interaction.guild.roles.cache.find(r => r.name === 'Muted');
-    if (!muteRole) {
-      muteRole = await interaction.guild.roles.create({
-        name: 'Muted',
-        color: 'GRAY',
-        permissions: [] // no permissions
-      });
-      await interaction.reply({ content: '✅ Created a new "Muted" role. Fixing permissions for all channels…' });
-    }
-
-    // Fix channel permissions automatically
-    for (const [, channel] of interaction.guild.channels.cache) {
-      try {
-        await channel.permissionOverwrites.edit(muteRole, {
-          SendMessages: false,
-          AddReactions: false,
-          Speak: false
-        });
-      } catch (err) {
-        console.warn(`Could not update permissions in ${channel.name}`);
-      }
-    }
-
-    if (member.roles.cache.has(muteRole.id)) {
-      return await interaction.reply({ content: `❌ <@${user.id}> is already muted.`, ephemeral: true });
-    }
-
-    await member.roles.add(muteRole, `Muted by ${interaction.user.tag} | Reason: ${reason}`);
-    await interaction.reply({ content: `✅ <@${user.id}> has been muted. Reason: ${reason}` });
-
-  } catch (err) {
-    console.error(err);
-    await interaction.reply({ content: '❌ Failed to mute the user. Check my permissions.', ephemeral: true });
   }
+
+  await target.timeout(10 * 60 * 1000, reason); // Example: 10 minutes
+  if (!isPublic) await interaction.reply({ content: `✅ ${target.user.tag} has been muted. Reason: ${reason}`, ephemeral: true });
 }

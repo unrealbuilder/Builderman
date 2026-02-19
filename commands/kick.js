@@ -1,44 +1,42 @@
-// commands/kick.js
-import { SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+
+const cooldowns = new Map();
+const COOLDOWN_TIME = 5000;
 
 export const data = new SlashCommandBuilder()
   .setName('kick')
-  .setDescription('Kicks a user from the server.')
+  .setDescription('Kick a user from the server (moderator only)')
   .addUserOption(option =>
-    option
-      .setName('user')
-      .setDescription('The user to kick')
+    option.setName('target')
+      .setDescription('User to kick')
       .setRequired(true)
   )
   .addStringOption(option =>
-    option
-      .setName('reason')
-      .setDescription('Reason for kicking')
+    option.setName('reason')
+      .setDescription('Reason for kick')
       .setRequired(false)
   );
 
-export async function execute(client, interaction) {
-  const user = interaction.options.getUser('user');
+export async function execute(interaction) {
+  const member = interaction.member;
+
+  if (!member.permissions.has('KickMembers') && !member.permissions.has('Administrator')) {
+    return interaction.reply({ content: '❌ You need kick permissions to use this command.', ephemeral: true });
+  }
+
+  const now = Date.now();
+  const cooldown = cooldowns.get(member.id) || 0;
+  if (now < cooldown) {
+    return interaction.reply({ content: `⏳ Cooldown active. Try again in ${Math.ceil((cooldown-now)/1000)}s.`, ephemeral: true });
+  }
+  cooldowns.set(member.id, now + COOLDOWN_TIME);
+
+  const target = interaction.options.getMember('target');
   const reason = interaction.options.getString('reason') || 'No reason provided';
 
-  try {
-    const member = await interaction.guild.members.fetch(user.id);
-    if (!member.kickable) {
-      return await interaction.reply({
-        content: `❌ I cannot kick <@${user.id}>. Check my role hierarchy and permissions.`,
-        ephemeral: true
-      });
-    }
+  if (!target) return interaction.reply({ content: '❌ Cannot find that user.', ephemeral: true });
+  if (!target.kickable) return interaction.reply({ content: '❌ I cannot kick this user.', ephemeral: true });
 
-    await member.kick(`${reason} (Kicked by ${interaction.user.tag})`);
-    await interaction.reply({
-      content: `✅ Successfully kicked <@${user.id}>. Reason: ${reason}`
-    });
-  } catch (err) {
-    console.error(err);
-    await interaction.reply({
-      content: '❌ Failed to kick the user. Make sure the ID is correct and I have proper permissions.',
-      ephemeral: true
-    });
-  }
+  await target.kick(reason);
+  await interaction.reply({ content: `✅ Kicked ${target.user.tag}. Reason: ${reason}`, ephemeral: true });
 }

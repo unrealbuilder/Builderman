@@ -1,44 +1,34 @@
-import { SlashCommandBuilder } from 'discord.js';
-import fs from 'fs';
-import path from 'path';
-
-const warningsFile = path.join('./data', 'warnings.json');
+import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 
 export const data = new SlashCommandBuilder()
   .setName('unwarn')
-  .setDescription('Remove a warning from a member')
-  .addUserOption(option => 
-    option.setName('user')
-      .setDescription('Member to remove a warning from')
-      .setRequired(true))
-  .addIntegerOption(option => 
-    option.setName('index')
-      .setDescription('Warning number to remove (default: last)'));
+  .setDescription('Remove a warning from a user.')
+  .addUserOption(option =>
+    option.setName('target')
+      .setDescription('User to remove warning from')
+      .setRequired(true)
+  )
+  .addStringOption(option =>
+    option.setName('reason')
+      .setDescription('Reason for removing the warning')
+      .setRequired(false)
+  );
 
-export async function execute(client, interaction) {
-  const user = interaction.options.getUser('user');
-  const index = interaction.options.getInteger('index');
+export async function execute(interaction) {
+  const member = interaction.member;
+  if (!member.permissions.has('ModerateMembers')) return interaction.reply({ content: '❌ You need moderator permissions.', ephemeral: true });
 
-  if (!fs.existsSync(warningsFile)) {
-    return interaction.reply({ content: `${user.tag} has no warnings.`, ephemeral: true });
-  }
+  const target = interaction.options.getUser('target');
+  const reason = interaction.options.getString('reason') || 'No reason provided';
 
-  const warnings = JSON.parse(fs.readFileSync(warningsFile, 'utf8'));
-  const userWarnings = warnings[user.id] || [];
+  // Implement your warnings storage logic here
+  // Example: warningsDB.removeWarning(target.id);
 
-  if (!userWarnings.length) {
-    return interaction.reply({ content: `${user.tag} has no warnings.`, ephemeral: true });
-  }
+  const embed = new EmbedBuilder()
+    .setTitle('⚠️ Warning Removed')
+    .setDescription(`${target.tag} has had a warning removed.\nReason: ${reason}`)
+    .setColor(0x00FF00)
+    .setTimestamp();
 
-  let removed;
-  if (index && index > 0 && index <= userWarnings.length) {
-    removed = userWarnings.splice(index - 1, 1)[0];
-  } else {
-    removed = userWarnings.pop(); // remove last warning
-  }
-
-  warnings[user.id] = userWarnings;
-  fs.writeFileSync(warningsFile, JSON.stringify(warnings, null, 2));
-
-  await interaction.reply({ content: `✅ Removed warning${index ? ` #${index}` : ''} from ${user.tag}: "${removed.reason}"`, ephemeral: true });
+  await interaction.reply({ embeds: [embed], ephemeral: true });
 }

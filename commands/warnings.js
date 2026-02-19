@@ -1,31 +1,32 @@
-import { SlashCommandBuilder } from 'discord.js';
-import fs from 'fs';
-import path from 'path';
-
-const warningsFile = path.join('./data', 'warnings.json');
+import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 
 export const data = new SlashCommandBuilder()
   .setName('warnings')
-  .setDescription('Check warnings of a member')
-  .addUserOption(option => 
-    option.setName('user')
-      .setDescription('Member to check')
-      .setRequired(true));
+  .setDescription('View warnings for a user.')
+  .addUserOption(option =>
+    option.setName('target')
+      .setDescription('User to view warnings for')
+      .setRequired(true)
+  );
 
-export async function execute(client, interaction) {
-  const user = interaction.options.getUser('user');
+export async function execute(interaction) {
+  const target = interaction.options.getUser('target');
 
-  if (!fs.existsSync(warningsFile)) {
-    return interaction.reply({ content: `${user.tag} has no warnings.`, ephemeral: true });
-  }
+  // Fetch warnings from your database
+  // Example: const userWarnings = warningsDB.getWarnings(target.id) || [];
 
-  const warnings = JSON.parse(fs.readFileSync(warningsFile, 'utf8'))[user.id] || [];
+  const userWarnings = [
+    { reason: 'Spamming', date: '2026-02-19' },
+    { reason: 'Harassment', date: '2026-02-15' }
+  ]; // Example data
 
-  if (!warnings.length) {
-    return interaction.reply({ content: `${user.tag} has no warnings.`, ephemeral: true });
-  }
+  const embed = new EmbedBuilder()
+    .setTitle(`⚠️ Warnings for ${target.tag}`)
+    .setColor(0xFFA500)
+    .setTimestamp()
+    .setDescription(userWarnings.length
+      ? userWarnings.map((w, i) => `${i+1}. ${w.reason} - ${w.date}`).join('\n')
+      : 'No warnings found.');
 
-  const formatted = warnings.map((w, i) => `**${i + 1}.** ${w.reason} (on ${new Date(w.date).toLocaleString()})`).join('\n');
-
-  await interaction.reply({ content: `Warnings for ${user.tag}:\n${formatted}`, ephemeral: true });
+  await interaction.reply({ embeds: [embed], ephemeral: true });
 }

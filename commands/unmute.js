@@ -1,36 +1,49 @@
-// commands/unmute.js
-import { SlashCommandBuilder, PermissionsBitField } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ChannelType } from 'discord.js';
 
 export const data = new SlashCommandBuilder()
   .setName('unmute')
-  .setDescription('Unmutes a user in this server.')
+  .setDescription('Unmute a user in the server.')
   .addUserOption(option =>
-    option.setName('user')
-      .setDescription('The user to unmute')
-      .setRequired(true));
+    option.setName('target')
+      .setDescription('User to unmute')
+      .setRequired(true)
+  )
+  .addBooleanOption(option =>
+    option.setName('public')
+      .setDescription('Announce the unmute publicly')
+      .setRequired(false)
+  )
+  .addChannelOption(option =>
+    option.setName('channel')
+      .setDescription('Channel to announce the unmute in')
+      .addChannelTypes(ChannelType.GuildText)
+      .setRequired(false)
+  );
 
-export async function execute(client, interaction) {
-  const user = interaction.options.getUser('user');
+export async function execute(interaction) {
+  const member = interaction.member;
+  if (!member.permissions.has('ModerateMembers')) return interaction.reply({ content: '❌ You need moderator permissions.', ephemeral: true });
 
-  try {
-    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
-      return await interaction.reply({ content: '❌ You do not have permission to unmute members.', ephemeral: true });
+  const target = interaction.options.getMember('target');
+  const isPublic = interaction.options.getBoolean('public');
+  const announceChannel = interaction.options.getChannel('channel');
+
+  if (!target) return interaction.reply({ content: '❌ Cannot find that user.', ephemeral: true });
+
+  await target.timeout(null); // Remove timeout
+
+  if (isPublic && announceChannel) {
+    const frames = ['🔊 Preparing unmute...', '🔊 Applying...', '🔊 Unmuted!'];
+    const embed = new EmbedBuilder().setTitle('🔊 Unmuting User').setColor(0x00FF00).setTimestamp();
+    const message = await announceChannel.send({ embeds: [embed] });
+    await interaction.reply({ content: `🚨 Public unmute countdown started for ${target.user.tag}`, ephemeral: true });
+
+    for (const frame of frames) {
+      embed.setDescription(`${frame}\nTarget: ${target.user.tag}`);
+      await message.edit({ embeds: [embed] });
+      await new Promise(r => setTimeout(r, 1000));
     }
-
-    const member = await interaction.guild.members.fetch(user.id);
-    const muteRole = interaction.guild.roles.cache.find(r => r.name === 'Muted');
-
-    if (!muteRole || !member.roles.cache.has(muteRole.id)) {
-      return await interaction.reply({ content: `❌ <@${user.id}> is not muted.`, ephemeral: true });
-    }
-
-    // Remove the Muted role
-    await member.roles.remove(muteRole, `Unmuted by ${interaction.user.tag}`);
-
-    await interaction.reply({ content: `✅ <@${user.id}> has been unmuted.` });
-
-  } catch (err) {
-    console.error(err);
-    await interaction.reply({ content: '❌ Failed to unmute the user. Check my permissions.', ephemeral: true });
+  } else {
+    await interaction.reply({ content: `✅ ${target.user.tag} has been unmuted.`, ephemeral: true });
   }
 }
