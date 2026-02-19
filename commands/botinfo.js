@@ -9,18 +9,20 @@ export const data = new SlashCommandBuilder()
   .setName('botinfo')
   .setDescription('Displays information about the bot.');
 
-export async function execute(interaction) {
+export async function execute(client, interaction) {
+  // Prevent the 3-second timeout
+  await interaction.deferReply();
 
   const embed = new EmbedBuilder()
     .setTitle('🤖 Bot Info')
-    .setColor('Blue')
+    .setColor(0x5865F2)
     .addFields(
-      { name: 'Name', value: interaction.client.user.tag, inline: true },
-      { name: 'Servers', value: `${interaction.client.guilds.cache.size}`, inline: true },
+      { name: 'Name', value: client.user.tag, inline: true },
+      { name: 'Servers', value: `${client.guilds.cache.size}`, inline: true },
       { name: 'Version', value: pkg.version, inline: true }
     )
     .setFooter({ text: 'Made with studs | Open Source' })
     .setTimestamp();
 
-  await interaction.reply({ embeds: [embed] });
+  await interaction.editReply({ embeds: [embed] });
 }

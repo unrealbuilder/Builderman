@@ -10,7 +10,8 @@ export const data = new SlashCommandBuilder()
   .setName('legal')
   .setDescription('View the bot’s Terms of Service and Privacy Policy.');
 
-export async function execute(interaction) {
+export async function execute(client, interaction) {
+  await interaction.deferReply({ ephemeral: true });
 
   const embed = new EmbedBuilder()
     .setTitle('📜 Legal & Privacy Notice')
@@ -23,8 +24,8 @@ export async function execute(interaction) {
       {
         name: '📘 Terms of Service (Summary)',
         value:
-          `• The bot is provided free of charge.\n` +
-          `• You must follow Discord’s Terms of Service.\n` +
+          `• The bot is free of charge.\n` +
+          `• Follow Discord’s Terms of Service.\n` +
           `• Do not abuse moderation features or exploit the bot.\n` +
           `• The bot is provided "as-is" without warranties.\n` +
           `• We may update, modify, or remove access at any time.`,
@@ -32,10 +33,10 @@ export async function execute(interaction) {
       {
         name: '🔐 Privacy Policy (Summary)',
         value:
-          `• We may access user IDs, usernames, and server IDs for functionality.\n` +
-          `• Messages are only accessed when required for commands.\n` +
+          `• User IDs, usernames, and server IDs may be used for functionality.\n` +
+          `• Messages accessed only when required.\n` +
           `• We do not sell or share personal data.\n` +
-          `• Data is stored only when necessary (e.g., moderation logs).\n` +
+          `• Data stored only when necessary.\n` +
           `• Continued use implies acceptance of this policy.`,
       }
     )
@@ -56,9 +57,8 @@ export async function execute(interaction) {
       .setURL('https://github.com/unrealbuilder/Builderman')
   );
 
-  await interaction.reply({
+  await interaction.editReply({
     embeds: [embed],
-    components: [row],
-    ephemeral: true
+    components: [row]
   });
 }
