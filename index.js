@@ -2,24 +2,24 @@ import 'dotenv/config';
 import { Client, Collection, GatewayIntentBits } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
+import messageCreateEvent from './events/messageCreate.js';
 
 // --------------------
 // CLIENT SETUP
 // --------------------
 const client = new Client({
   intents: [
-    GatewayIntentBits.Guilds,           // for slash commands
+    GatewayIntentBits.Guilds,           // needed for slash commands
     GatewayIntentBits.GuildMessages,    // to read messages
-    GatewayIntentBits.MessageContent,   // needed for messageCreate events
+    GatewayIntentBits.MessageContent,   // needed for messageCreate
     GatewayIntentBits.GuildMembers      // needed for mute/unmute
   ]
 });
 
-client.commands = new Collection();
-
 // --------------------
 // LOAD COMMANDS
 // --------------------
+client.commands = new Collection();
 const commandsPath = path.resolve('./commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
 
@@ -41,7 +41,7 @@ for (const file of commandFiles) {
 // SLASH COMMAND HANDLER
 // --------------------
 client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
+  if (!interaction.isCommand()) return; // use the old working style
 
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
@@ -59,10 +59,9 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 // --------------------
-// MESSAGE CREATE EVENT (for muted users DM warning)
+// MESSAGE CREATE EVENT (muted users)
 // --------------------
-import messageCreateEvent from './events/messageCreate.js';
-client.on('messageCreate', (message) => messageCreateEvent(client, message));
+client.on('messageCreate', message => messageCreateEvent(client, message));
 
 // --------------------
 // READY
