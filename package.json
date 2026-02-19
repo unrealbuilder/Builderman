@@ -29,5 +29,11 @@
     "url": "https://github.com/unrealbuilder/Builderman/issues"
   },
   "homepage": "https://github.com/unrealbuilder/Builderman#readme",
-  "keywords": ["discord", "bot", "esm", "nodejs", "express"]
+  "keywords": [
+    "discord",
+    "bot",
+    "esm",
+    "nodejs",
+    "express"
+  ]
 }
