@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, ChannelType } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ChannelType, PermissionFlagsBits } from 'discord.js';
 
 export const data = new SlashCommandBuilder()
   .setName('mute')
@@ -27,7 +27,9 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const member = interaction.member;
-  if (!member.permissions.has('ModerateMembers')) return interaction.reply({ content: '❌ You need moderator permissions.', ephemeral: true });
+  if (!member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+    return interaction.reply({ content: '❌ You need moderator permissions.', ephemeral: true });
+  }
 
   const target = interaction.options.getMember('target');
   const reason = interaction.options.getString('reason') || 'No reason provided';
@@ -37,19 +39,21 @@ export async function execute(interaction) {
   if (!target) return interaction.reply({ content: '❌ Cannot find that user.', ephemeral: true });
   if (!target.moderatable) return interaction.reply({ content: '❌ Cannot mute this user.', ephemeral: true });
 
+  // Apply the mute (example: 10 minutes)
+  await target.timeout(10 * 60 * 1000, reason);
+
+  // Build the embed
+  const embed = new EmbedBuilder()
+    .setTitle('🔇 User Muted')
+    .setColor(0xFFA500)
+    .setTimestamp()
+    .setDescription(`**Target:** ${target.user.tag}\n**Reason:** ${reason}`);
+
+  // Send embed publicly if requested
   if (isPublic && announceChannel) {
-    const frames = ['🔇 Preparing mute...', '🔇 Applying...', '🔇 Muted!'];
-    const embed = new EmbedBuilder().setTitle('🔇 Muting User').setColor(0xFFA500).setTimestamp();
-    const message = await announceChannel.send({ embeds: [embed] });
-    await interaction.reply({ content: `🚨 Public mute countdown started for ${target.user.tag}`, ephemeral: true });
-
-    for (const frame of frames) {
-      embed.setDescription(`${frame}\nTarget: ${target.user.tag}`);
-      await message.edit({ embeds: [embed] });
-      await new Promise(r => setTimeout(r, 1000));
-    }
+    await announceChannel.send({ embeds: [embed] });
+    await interaction.reply({ content: `✅ ${target.user.tag} has been muted and announced in ${announceChannel}.`, ephemeral: true });
+  } else {
+    await interaction.reply({ embeds: [embed], ephemeral: true });
   }
-
-  await target.timeout(10 * 60 * 1000, reason); // Example: 10 minutes
-  if (!isPublic) await interaction.reply({ content: `✅ ${target.user.tag} has been muted. Reason: ${reason}`, ephemeral: true });
 }
