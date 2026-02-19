@@ -3,10 +3,23 @@ import { Client, Collection, GatewayIntentBits } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+// --------------------
+// CLIENT SETUP
+// --------------------
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,           // for slash commands
+    GatewayIntentBits.GuildMessages,    // to read messages
+    GatewayIntentBits.MessageContent,   // needed for messageCreate events
+    GatewayIntentBits.GuildMembers      // needed for mute/unmute
+  ]
+});
 
-// Load commands
 client.commands = new Collection();
+
+// --------------------
+// LOAD COMMANDS
+// --------------------
 const commandsPath = path.resolve('./commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
 
@@ -24,16 +37,19 @@ for (const file of commandFiles) {
   }
 }
 
-// Handle slash commands
-client.on('interactionCreate', async interaction => {
-  if (!interaction.isCommand()) return;
+// --------------------
+// SLASH COMMAND HANDLER
+// --------------------
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
   try {
     await command.execute(client, interaction);
   } catch (err) {
-    console.error(`Error executing ${interaction.commandName}:`, err);
+    console.error(`❌ Error executing ${interaction.commandName}:`, err);
     if (interaction.replied || interaction.deferred) {
       await interaction.followUp({ content: 'There was an error while executing this command.', ephemeral: true });
     } else {
@@ -42,8 +58,20 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
+// --------------------
+// MESSAGE CREATE EVENT (for muted users DM warning)
+// --------------------
+import messageCreateEvent from './events/messageCreate.js';
+client.on('messageCreate', (message) => messageCreateEvent(client, message));
+
+// --------------------
+// READY
+// --------------------
 client.once('ready', () => {
-  console.log(`${client.user.tag} is online!`);
+  console.log(`✅ ${client.user.tag} is online!`);
 });
 
+// --------------------
+// LOGIN
+// --------------------
 client.login(process.env.DISCORD_TOKEN);
