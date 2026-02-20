@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ===============================
-# Git Push & Optional Deploy Script (ESM-friendly)
+# Git Push & Optional Deploy Script (Auto-detect ESM)
 # ===============================
 
 # Colors for output
@@ -53,16 +53,17 @@ fi
 # Optional: Run deploy script
 read -p "Run deploy script after push? (y/n) " DEPLOY_CONFIRM
 if [[ "$DEPLOY_CONFIRM" =~ ^[Yy]$ ]]; then
-    DEPLOY_PATH="./deploy-commands.js"
-    if [ -f "$DEPLOY_PATH" ]; then
-        echo -e "${GREEN}Running deploy-commands.js...${NC}"
-        # Run the deploy script with Node as ESM
-        node --loader esm "$DEPLOY_PATH" || {
-            echo -e "${RED}Error running deploy-commands.js.${NC}"
+    # Auto-detect deploy-commands.js in scripts/ folder
+    DEPLOY_FILE=$(find "$(pwd)/scripts" -maxdepth 1 -name "deploy-commands.js" | head -n 1)
+
+    if [ -n "$DEPLOY_FILE" ]; then
+        echo -e "${GREEN}Running deploy script: $DEPLOY_FILE${NC}"
+        node "$DEPLOY_FILE" || {
+            echo -e "${RED}Error: Deploy script failed.${NC}"
         }
         echo -e "${GREEN}Deploy finished.${NC}"
     else
-        echo -e "${RED}deploy-commands.js not found. Skipping deploy.${NC}"
+        echo -e "${RED}No deploy-commands.js found in scripts/. Skipping deploy.${NC}"
     fi
 else
     echo -e "${YELLOW}Skipping deploy.${NC}"
