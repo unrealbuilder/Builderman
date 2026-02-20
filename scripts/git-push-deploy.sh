@@ -53,12 +53,16 @@ fi
 # Optional: Run deploy command
 read -p "Run deploy script after push? (y/n) " DEPLOY_CONFIRM
 if [[ "$DEPLOY_CONFIRM" =~ ^[Yy]$ ]]; then
-    if [ -f "./deploy-commands.js" ]; then
+    # Use the script’s directory as the base path
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    DEPLOY_SCRIPT="$SCRIPT_DIR/deploy-commands.js"
+
+    if [ -f "$DEPLOY_SCRIPT" ]; then
         echo -e "${GREEN}Running deploy-commands.js...${NC}"
-        node deploy-commands.js
+        node "$DEPLOY_SCRIPT"
         echo -e "${GREEN}Deploy finished.${NC}"
     else
-        echo -e "${RED}deploy-commands.js not found. Skipping deploy.${NC}"
+        echo -e "${RED}deploy-commands.js not found in $SCRIPT_DIR. Skipping deploy.${NC}"
     fi
 else
     echo -e "${YELLOW}Skipping deploy.${NC}"

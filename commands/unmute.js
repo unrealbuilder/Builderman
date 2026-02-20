@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, ChannelType, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ChannelType } from 'discord.js';
 
 export const data = new SlashCommandBuilder()
   .setName('unmute')
@@ -22,30 +22,27 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const member = interaction.member;
-  if (!member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+  if (!member.permissions.has('ModerateMembers')) {
     return interaction.reply({ content: '❌ You need moderator permissions.', ephemeral: true });
   }
 
   const target = interaction.options.getMember('target');
-  const isPublic = interaction.options.getBoolean('public');
-  const announceChannel = interaction.options.getChannel('channel');
-
   if (!target) return interaction.reply({ content: '❌ Cannot find that user.', ephemeral: true });
 
-  // Remove mute/timeout
-  await target.timeout(null);
+  await target.timeout(null); // Remove timeout
 
-  // Build the embed
   const embed = new EmbedBuilder()
     .setTitle('🔊 User Unmuted')
     .setColor(0x00FF00)
-    .setTimestamp()
-    .setDescription(`**Target:** ${target.user.tag}`);
+    .setDescription(`**Target:** ${target.user.tag}`)
+    .setTimestamp();
 
-  // Send embed publicly if requested
+  const isPublic = interaction.options.getBoolean('public');
+  const announceChannel = interaction.options.getChannel('channel');
+
   if (isPublic && announceChannel) {
     await announceChannel.send({ embeds: [embed] });
-    await interaction.reply({ content: `✅ ${target.user.tag} has been unmuted and announced in ${announceChannel}.`, ephemeral: true });
+    await interaction.reply({ content: `✅ ${target.user.tag} has been unmuted publicly.`, ephemeral: true });
   } else {
     await interaction.reply({ embeds: [embed], ephemeral: true });
   }

@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, ChannelType, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ChannelType } from 'discord.js';
 
 export const data = new SlashCommandBuilder()
   .setName('mute')
@@ -27,32 +27,29 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const member = interaction.member;
-  if (!member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+  if (!member.permissions.has('ModerateMembers')) {
     return interaction.reply({ content: '❌ You need moderator permissions.', ephemeral: true });
   }
 
   const target = interaction.options.getMember('target');
+  if (!target) return interaction.reply({ content: '❌ Cannot find that user.', ephemeral: true });
+  if (!target.moderatable) return interaction.reply({ content: '❌ Cannot mute this user.', ephemeral: true });
+
   const reason = interaction.options.getString('reason') || 'No reason provided';
   const isPublic = interaction.options.getBoolean('public');
   const announceChannel = interaction.options.getChannel('channel');
 
-  if (!target) return interaction.reply({ content: '❌ Cannot find that user.', ephemeral: true });
-  if (!target.moderatable) return interaction.reply({ content: '❌ Cannot mute this user.', ephemeral: true });
+  await target.timeout(10 * 60 * 1000, reason); // 10 minutes
 
-  // Apply the mute (example: 10 minutes)
-  await target.timeout(10 * 60 * 1000, reason);
-
-  // Build the embed
   const embed = new EmbedBuilder()
     .setTitle('🔇 User Muted')
     .setColor(0xFFA500)
-    .setTimestamp()
-    .setDescription(`**Target:** ${target.user.tag}\n**Reason:** ${reason}`);
+    .setDescription(`**Target:** ${target.user.tag}\n**Reason:** ${reason}`)
+    .setTimestamp();
 
-  // Send embed publicly if requested
   if (isPublic && announceChannel) {
     await announceChannel.send({ embeds: [embed] });
-    await interaction.reply({ content: `✅ ${target.user.tag} has been muted and announced in ${announceChannel}.`, ephemeral: true });
+    await interaction.reply({ content: `✅ ${target.user.tag} has been muted publicly.`, ephemeral: true });
   } else {
     await interaction.reply({ embeds: [embed], ephemeral: true });
   }
