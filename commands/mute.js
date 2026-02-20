@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, ChannelType } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ChannelType, PermissionsBitField } from 'discord.js';
 
 export const data = new SlashCommandBuilder()
   .setName('mute')
@@ -27,11 +27,16 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const member = interaction.member;
-  if (!member.permissions.has('ModerateMembers')) {
+
+  // Check if the command user has permission
+  if (!member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
     return interaction.reply({ content: '❌ You need moderator permissions.', ephemeral: true });
   }
 
-  const target = interaction.options.getMember('target');
+  // Fetch the target member
+  const targetUser = interaction.options.getUser('target');
+  const target = interaction.guild.members.cache.get(targetUser.id) 
+               || await interaction.guild.members.fetch(targetUser.id).catch(() => null);
   if (!target) return interaction.reply({ content: '❌ Cannot find that user.', ephemeral: true });
   if (!target.moderatable) return interaction.reply({ content: '❌ Cannot mute this user.', ephemeral: true });
 
@@ -39,14 +44,17 @@ export async function execute(interaction) {
   const isPublic = interaction.options.getBoolean('public');
   const announceChannel = interaction.options.getChannel('channel');
 
-  await target.timeout(10 * 60 * 1000, reason); // 10 minutes
+  // Apply the mute (10 minutes example)
+  await target.timeout(10 * 60 * 1000, reason);
 
+  // Build embed
   const embed = new EmbedBuilder()
     .setTitle('🔇 User Muted')
     .setColor(0xFFA500)
     .setDescription(`**Target:** ${target.user.tag}\n**Reason:** ${reason}`)
     .setTimestamp();
 
+  // Send embed
   if (isPublic && announceChannel) {
     await announceChannel.send({ embeds: [embed] });
     await interaction.reply({ content: `✅ ${target.user.tag} has been muted publicly.`, ephemeral: true });
